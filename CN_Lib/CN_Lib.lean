@@ -5,7 +5,6 @@ namespace CN_Lib
 -- Bounds on the unsigned integer types.
 abbrev min_UChar : Int := 0
 abbrev max_UChar : Int := 2 ^ 8 - 1
--- TODO: what to do for Bool?
 abbrev min_UShort := 0
 abbrev max_UShort := 2 ^ 16 - 1
 abbrev min_UInt : Int := 0
@@ -23,41 +22,39 @@ abbrev max_Int : Int := 2 ^ 31 - 1
 abbrev min_Long : Int := -(2 ^ 63 - 1)
 abbrev max_Long : Int := 2 ^ 63 - 1
 
---  We roll our own pseudo-bitvectors below because we still have to
---  reason about ownership of individual Ints sometimes.
+-- We roll our own pseudo-bitvectors below to match CN's representation of C
+-- integer types as mathematical integers with bounds, which is slightly
+-- different from what Lean's bitvector library provides.
+
+-- This function converts an integer to a vector of n bytes (represented as
+--    integers) in big-endian order.
 @[simp, reducible]
-def Fin_to_Ints (n : Nat) : Int → (Fin n → Int) :=
+def to_CN_BitVec (n : Nat) : Int → (Fin n → Int) :=
   fun v i => (v % 2 ^(8 * (n - i.toNat))) / (2 ^ (8 * (n - 1 - i.toNat)))
 @[simp, reducible]
-def Ints_to_Fin {n : Nat} (f : Fin n → Int) : Int :=
+def from_CN_BitVec {n : Nat} (f : Fin n → Int) : Int :=
   List.foldl
     (fun acc i => acc + f i * 2 ^ (8 * (n - 1 - i.toNat)))
     0
     (List.finRange n)
 
 @[simp, reducible]
-def UShort_bytes (v : Int) : Fin 2 → Int :=
-  Fin_to_Ints 2 v
+def UShort_bytes (v : Int) : Fin 2 → Int := to_CN_BitVec 2 v
 
 @[simp, reducible]
-def UInt_bytes (v : Int) : Fin 4 → Int :=
-  Fin_to_Ints 4 v
+def UInt_bytes (v : Int) : Fin 4 → Int := to_CN_BitVec 4 v
 
 @[simp, reducible]
-def ULong_bytes (v : Int) : Fin 8 → Int :=
-  Fin_to_Ints 8 v
+def ULong_bytes (v : Int) : Fin 8 → Int := to_CN_BitVec 8 v
 
 @[simp, reducible]
-def bytes_UShort (f : Fin 2 → Int) : Int :=
-  Ints_to_Fin f
+def bytes_UShort (f : Fin 2 → Int) : Int := from_CN_BitVec f
 
 @[simp, reducible]
-def bytes_UInt (f : Fin 4 → Int) : Int :=
-  Ints_to_Fin f
+def bytes_UInt (f : Fin 4 → Int) : Int := from_CN_BitVec f
 
 @[simp, reducible]
-def bytes_ULong (f : Fin 8 → Int) : Int :=
-  Ints_to_Fin f
+def bytes_ULong (f : Fin 8 → Int) : Int := from_CN_BitVec f
 
 theorem UShort_idem {v : Int} :
    min_UShort ≤ v ∧ v ≤ max_UShort
@@ -71,7 +68,7 @@ theorem UInt_idem {v : Int} :
   → v = bytes_UInt (UInt_bytes v) :=
 by
   intro ⟨Hv , Hv'⟩
-  unfold UInt_bytes Fin_to_Ints bytes_UInt Ints_to_Fin List.finRange
+  unfold UInt_bytes  bytes_UInt from_CN_BitVec to_CN_BitVec List.finRange
   simp only [List.ofFn, Fin.foldr, Fin.foldr.loop, List.foldl]
   simp only [Fin.toNat]
   lia
@@ -81,7 +78,7 @@ theorem ULong_idem {v : Int} :
   → v = bytes_ULong (ULong_bytes v) :=
 by
   intro ⟨Hv , Hv'⟩
-  unfold ULong_bytes Fin_to_Ints bytes_ULong Ints_to_Fin List.finRange
+  unfold ULong_bytes  bytes_ULong from_CN_BitVec to_CN_BitVec List.finRange
   simp only [List.ofFn, Fin.foldr, Fin.foldr.loop, List.foldl]
   simp only [Fin.toNat]
   lia
@@ -134,15 +131,14 @@ by
   rw [H] at HEq; symm at HEq'
   rw [HEq'] at HEq; assumption
 
--- Other stuff
+-- wrapI and related theorems
 def wrapI (minInt : Int) (maxInt : Int) x :=
   let delta := ((maxInt - minInt) + 1)
   let r := x % delta
   (if (r <= maxInt) then r else r - delta)
 
 theorem wrapI_within_bounds :
-  ∀ {min max x : Int},
-  (min ≤ 0 ∧ 0 < max) →
+  ∀ {min max x : Int}, (min ≤ 0 ∧ 0 < max) →
   min ≤ wrapI min max x ∧ wrapI min max x ≤ max :=
 by
   intro min max x H
@@ -172,8 +168,7 @@ by
 
 theorem wrapI_idem:
   ∀ {min max x : Int},
-  (min ≤ x ∧ x ≤ max) →
-  (min ≤ 0 ∧ 0 < max) →
+  (min ≤ x ∧ x ≤ max) → (min ≤ 0 ∧ 0 < max) →
   wrapI min max x = x :=
 by
   intros min max x H1 H2
@@ -193,8 +188,7 @@ by
 
 theorem wrapI_pos_neg_neq :
   ∀ {max Umax v v' : Int} {_: Umax = 2 * max + 1},
-  0 ≤ v ∧ v ≤ max →
-  -max ≤ v' ∧ v' < 0 →
+  0 ≤ v ∧ v ≤ max → -max ≤ v' ∧ v' < 0 →
   wrapI 0 Umax v ≠ wrapI 0 Umax v' :=
 by
   intros max Umax v v' inv Hv Hv'
@@ -204,33 +198,29 @@ by
     apply Int.emod_eq_of_lt
     · exact ‹0 ≤ v ∧ v ≤ max›.1
     · omega
-  have hv'rem : v' % (2 * max + 2) = v' + (2 * max + 2) := by
+  have hvrem' : v' % (2 * max + 2) = v' + (2 * max + 2) := by
     rw [Int.emod_eq_add_self_emod]
     apply Int.emod_eq_of_lt; omega; omega
-  rw [hvrem, hv'rem]; omega
+  rw [hvrem, hvrem']; omega
 
 theorem wrapI_cong_pos :
   ∀ {max Umax v v' : Int} {_ : 0 ≤ max}
     {_ : Umax = (2 * max + 1)},
-    0 ≤ v ∧ v ≤ max
-  → 0 ≤ v' ∧ v' ≤ max
+    0 ≤ v ∧ v ≤ max → 0 ≤ v' ∧ v' ≤ max
   → wrapI 0 Umax v = wrapI 0 Umax v'
   → v = v' :=
 by
   intro max Umax v v' hpos inv ⟨H1, H1'⟩ ⟨H2, H2'⟩ Hwrap
   have HEq : wrapI 0 Umax v = v := by
-        apply wrapI_idem; lia
-        simp [inv]; lia
+    apply wrapI_idem; lia; simp [inv]; lia
   have HEq' : wrapI 0 Umax v' = v' := by
-    apply wrapI_idem; lia
-    simp [inv]; lia
+    apply wrapI_idem; lia; simp [inv]; lia
   rw [HEq, HEq'] at Hwrap; assumption
 
 theorem wrapI_cong_neg :
   ∀ {max Umax v v' : Int} {_ : 0 ≤ max}
     {_ : Umax = (2 * max + 1)},
-    -max ≤ v ∧ v < 0
-  → -max ≤ v' ∧ v' < 0
+    -max ≤ v ∧ v < 0 → -max ≤ v' ∧ v' < 0
   → wrapI 0 Umax v = wrapI 0 Umax v'
   → v = v' :=
 by
@@ -243,43 +233,37 @@ by
   have h : v % (2 * max + 2) ≤ 2 * max + 1 := by omega
   have h' : v' % (2 * max + 2) ≤ 2 * max + 1 := by omega
   simp [wrapI, hU, Int.add_assoc, h, h'] at hEq
-  have hvrem :
-    v % (2 * max + 2) = v + (2 * max + 2) := by
+  have hvrem : v % (2 * max + 2) = v + (2 * max + 2) := by
     rw [Int.emod_eq_add_self_emod]
     apply Int.emod_eq_of_lt <;> omega
-  have hvrem' :
-    v' % (2 * max + 2) = v' + (2 * max + 2) := by
+  have hvrem' : v' % (2 * max + 2) = v' + (2 * max + 2) := by
     rw [Int.emod_eq_add_self_emod]
     apply Int.emod_eq_of_lt <;> omega
-  rw [hvrem, hvrem'] at hEq
-  omega
+  rw [hvrem, hvrem'] at hEq; omega
 
 theorem wrapI_cong :
   ∀ {max v v' : Int}, 0 ≤ max
-  → -max ≤ v ∧ v ≤ max
-  → -max ≤ v' ∧ v' ≤ max
+  → -max ≤ v ∧ v ≤ max → -max ≤ v' ∧ v' ≤ max
   → wrapI 0 (2 * max + 1) v = wrapI 0 (2 * max + 1) v'
   → v = v' :=
 by
-  intro max v v' hpos ⟨H1, H1'⟩ ⟨H2, H2'⟩ Hwrap
+  intro max v v' hpos H1 H2 Hwrap
   by_cases h0 : 0 ≤ v
-  · by_cases h0' : 0 ≤ v'
-    · have h : 0 ≤ v ∧ v ≤ max := by omega
-      have h' : 0 ≤ v' ∧ v' ≤ max := by omega
-      apply wrapI_cong_pos h h' Hwrap;
+  · have h : 0 ≤ v ∧ v ≤ max := by omega
+    by_cases h0' : 0 ≤ v'
+    · have h' : 0 ≤ v' ∧ v' ≤ max := by omega
+      apply wrapI_cong_pos h h' Hwrap
       assumption; rfl
     · exfalso
-      have h : 0 ≤ v ∧ v ≤ max := by omega
       have h' : -max ≤ v' ∧ v' < 0 := by omega
       apply wrapI_pos_neg_neq h h' Hwrap; rfl
-  · by_cases h0' : 0 ≤ v'
+  · have h : -max ≤ v ∧ v < 0 := by omega
+    by_cases h0' : 0 ≤ v'
     · exfalso
-      have h : -max ≤ v ∧ v < 0 := by omega
       have h' : 0 ≤ v' ∧ v' ≤ max := by omega
       apply wrapI_pos_neg_neq h' h Hwrap.symm; rfl
-    · have h : -max ≤ v ∧ v < 0 := by omega
-      have h' : -max ≤ v' ∧ v' < 0 := by omega
-      apply wrapI_cong_neg h h' Hwrap;
+    · have h' : -max ≤ v' ∧ v' < 0 := by omega
+      apply wrapI_cong_neg h h' Hwrap
       assumption; rfl
 
 theorem wrapI_Char_cong :
@@ -304,6 +288,15 @@ theorem wrapI_Int_cong :
   min_Int ≤ v ∧ v ≤ max_Int
   → min_Int ≤ v' ∧ v' ≤ max_Int
   → wrapI min_UInt max_UInt v = wrapI min_UInt max_UInt v'
+  → v = v' :=
+by
+  intro Hv Hv' Hwrap
+  apply wrapI_cong _ Hv Hv' Hwrap; omega
+
+theorem wrapI_Long_cong :
+  min_Long ≤ v ∧ v ≤ max_Long
+  → min_Long ≤ v' ∧ v' ≤ max_Long
+  → wrapI min_ULong max_ULong v = wrapI min_ULong max_ULong v'
   → v = v' :=
 by
   intro Hv Hv' Hwrap
