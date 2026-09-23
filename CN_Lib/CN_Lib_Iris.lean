@@ -72,18 +72,18 @@ def AllocHist_elem (l : AllocId) (v : AllocMetaData) : IProp GF :=
 def Live (l : AllocId) : IProp GF :=
   iOwn (E := allocHistPreS.liveset) (allocHistGS.liveset_name GF) (◯ (.valid { l }))
 
-syntax "AllocHistory[@" term "]" "=>" "(" term ("," term)? ")" : term
+syntax "AllocHistory[@" term "]" "=" "(" term ("," term)? ")" : term
 macro_rules
-  | `(AllocHistory[@$l] => ($v , true))  => `(iprop% AllocHist_elem $l $v ∗ Live $l)
-  | `(AllocHistory[@$l] => ($v , false))  => `(iprop% AllocHist_elem $l $v ∗ ¬ Live $l)
-  | `(AllocHistory[@$l] => ($v))  => `(iprop% AllocHist_elem $l $v)
+  | `(AllocHistory[@$l] = ($v , true))  => `(iprop% AllocHist_elem $l $v ∗ Live $l)
+  | `(AllocHistory[@$l] = ($v , false))  => `(iprop% AllocHist_elem $l $v ∗ ¬ Live $l)
+  | `(AllocHistory[@$l] = ($v))  => `(iprop% AllocHist_elem $l $v)
 
 -- Example usage of new syntax
 def alloc_entry_example (l : AllocId) (b : Addr) (n : Nat) : IProp GF :=
-  AllocHistory[@l] => ({ base := b, size := n }, true)
+  AllocHistory[@l] = ({ base := b, size := n }, true)
 -- The following is also valid and corresponds to `A[@l] = { (b, n) , _ }`
 def alloc_entry_example2 (l : AllocId) (b : Addr) (n : Nat) : IProp GF :=
-  AllocHistory[@l] => ({ base := b, size := n })
+  AllocHistory[@l] = ({ base := b, size := n })
 
 -- 2, CN-style ownership predicates.
 --  Every ownership predicate reduces to the generic 'Owned' predicate:
@@ -97,7 +97,7 @@ def Owned (ptr : Ptr) (val : Int)
   ∗ ⌜ min ≤ val ∧ val ≤ max ⌝              -- Value is within bounds
   -- Assertions about pointer provenance
   ∗ ∃ (b : Addr) (n' : Nat),               -- Allocation history entry exists
-      AllocHistory[@l.id] => ({ base := b, size := n' })
+      AllocHistory[@l.id] = ({ base := b, size := n' })
   ∗ ⌜ b ≤ l.addr ∧ l.addr ≤ b + n ⌝        -- Address is within bounds
 
 -- Ownership of unsigned integer types
@@ -139,7 +139,7 @@ def Block (ptr : Ptr) (L : List Int) : IProp GF := iprop%
   ∗ ([∗list] i ∈ L, (l.addr + i) ↦ none)  -- Points-to for each byte
   -- Assertions about pointer provenance
   ∗ ∃ (b : Addr) (n' : Nat),              -- Allocation history entry exists
-      AllocHistory[@l.id] => ({ base := b, size := n' })
+      AllocHistory[@l.id] = ({ base := b, size := n' })
   ∗ ⌜ b ≤ l.addr ∧ l.addr ≤ b + n' ⌝      -- Address is within bounds
 
 -- Ownership of integer type-sized blocks
