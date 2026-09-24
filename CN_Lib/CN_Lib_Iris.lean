@@ -14,7 +14,7 @@ namespace CN_Lib
 
 -- Library for things needed by CN lemma exports.
 
--- 1, Resource algebra for heaps that are maps from integers to integers.
+-- 1, Resource algebra based on CN-VIP.
 
 abbrev Addr    := Int -- Addresses are integers
 abbrev AllocId := Int -- Allocation IDs are integers
@@ -32,24 +32,22 @@ structure AllocMetaData where
   base         : Addr
   size          : Nat
 
-abbrev Alloc_HistoryF := fun V => Std.ExtTreeMap AllocId V compare
+abbrev AllocMap := Std.ExtTreeMap AllocId AllocMetaData compare
 
 -- The liveset is a set of allocation IDs
 abbrev LiveSet := Auth (LeibnizSet (Std.ExtTreeSet AllocId compare))
 abbrev LiveSetF := constOF LiveSet
 
 /- We stagger the definition of the allocation history resource algebra into two
-  classes. The first class defines the allocation history resource algebra. -/
+  classes. The first class defines the liveset resource algebra. -/
 class allocHistPreS (GF : BundledGFunctors) where
-  allocmap : GhostMapG GF AllocId AllocMetaData Alloc_HistoryF
   liveset  : ElemG GF LiveSetF
-attribute [reducible, instance] allocHistPreS.allocmap
 attribute [reducible, instance] allocHistPreS.liveset
 
 /- The second class ensures only one instane of allocHistPreS existsm by fixing
-  two ghost names for the ghost map and the liveset. -/
+  a ghost name for the liveset. -/
 class allocHistGS (GF : BundledGFunctors) extends allocHistPreS GF where
-  allocmap_name : GName
+  allocmap : AllocMap
   liveset_name  : GName
 
 -- The heap is a map from addresses to values
@@ -59,6 +57,8 @@ abbrev VIP_HeapF := fun V => Std.ExtTreeMap Addr V compare
 class VIP_HeapGS (GF : BundledGFunctors) where
   provenance : allocHistGS GF
   memory     : genHeapGS Addr Val GF VIP_HeapF
+  -- TODO: enforce validity condition that the liveset is a subset of dom(alloc history)
+  -- valid   : ExtTreeMap.keys provenance.allocmap = []
 
 attribute [reducible, instance] VIP_HeapGS.provenance
 attribute [reducible, instance] VIP_HeapGS.memory
@@ -66,17 +66,18 @@ attribute [reducible, instance] VIP_HeapGS.memory
 variable {GF : BundledGFunctors} [G : VIP_HeapGS GF]
 
 -- Here is some nicer syntax for looking stuff up in the allocation history.
-def AllocHist_elem (l : AllocId) (v : AllocMetaData) : IProp GF :=
-  (allocHistGS.allocmap_name GF) ↪◯MAP[l] v
+def AllocHist_elem (l : AllocId) (v : AllocMetaData) : IProp GF := iprop%
+  ⌜ (allocHistGS.allocmap GF).get? l = some v ⌝
 
 def Live (l : AllocId) : IProp GF :=
   iOwn (E := allocHistPreS.liveset) (allocHistGS.liveset_name GF) (◯ (.valid { l }))
 
 syntax "AllocHistory[@" term "]" "=" "(" term ("," term)? ")" : term
 macro_rules
-  | `(AllocHistory[@$l] = ($v , true))  => `(iprop% AllocHist_elem $l $v ∗ Live $l)
+  | `(AllocHistory[@$l] = ($v , true))   => `(iprop% AllocHist_elem $l $v ∗ Live $l)
+  -- TODO: should this just be `(iprop% AllocHist_elem $l $v)?
   | `(AllocHistory[@$l] = ($v , false))  => `(iprop% AllocHist_elem $l $v ∗ ¬ Live $l)
-  | `(AllocHistory[@$l] = ($v))  => `(iprop% AllocHist_elem $l $v)
+  | `(AllocHistory[@$l] = ($v))          => `(iprop% AllocHist_elem $l $v)
 
 -- Example usage of new syntax
 def alloc_entry_example (l : AllocId) (b : Addr) (n : Nat) : IProp GF :=
