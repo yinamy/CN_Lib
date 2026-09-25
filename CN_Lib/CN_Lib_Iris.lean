@@ -153,8 +153,8 @@ def Block_Int (l : Ptr) : IProp GF := iprop%
 def Block_Long (l : Ptr) : IProp GF := iprop%
   Block l [0, 1, 2, 3, 4, 5, 6, 7]
 
-def arrayshift (l : Loc) (pos : Int) (size : Int) :=
-  pos * size + l.addr
+-- TODO: Implement
+def arrayshift (p : Ptr) (pos : Int) (size : Int) : Ptr := sorry
 
 -- TODO: Implement
 def padding (p : Ptr) (n : Nat) : IProp GF := sorry
