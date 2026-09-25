@@ -153,6 +153,12 @@ def Block_Int (l : Ptr) : IProp GF := iprop%
 def Block_Long (l : Ptr) : IProp GF := iprop%
   Block l [0, 1, 2, 3, 4, 5, 6, 7]
 
+def arrayshift (l : Loc) (pos : Int) (size : Int) :=
+  pos * size + l.addr
+
+-- TODO: Implement
+def padding (p : Ptr) (n : Nat) : IProp GF := sorry
+
 -- 4, Value equality theorems for Owned
 -- Helper theorem 1
 theorem points_agree_addr_1 {l : Loc} {v v' : Int} :
