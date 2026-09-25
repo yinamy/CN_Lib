@@ -34,21 +34,23 @@ structure AllocMetaData where
 
 abbrev AllocMap := Std.ExtTreeMap AllocId AllocMetaData compare
 
--- The liveset is a set of allocation IDs
-abbrev LiveSet := Auth (LeibnizSet (Std.ExtTreeSet AllocId compare))
-abbrev LiveSetF := constOF LiveSet
+-- The liveset is a set of allocation IDs and a proof that the set is in dom(alloc history).
+abbrev LiveSetR := Auth (LeibnizSet (Std.ExtTreeSet AllocId compare))
 
 /- We stagger the definition of the allocation history resource algebra into two
   classes. The first class defines the liveset resource algebra. -/
 class allocHistPreS (GF : BundledGFunctors) where
-  liveset  : ElemG GF LiveSetF
-attribute [reducible, instance] allocHistPreS.liveset
+  livesetR  : ElemG GF (constOF LiveSetR)
+attribute [reducible, instance] allocHistPreS.livesetR
 
-/- The second class ensures only one instane of allocHistPreS existsm by fixing
+/- The second class ensures only one instane of allocHistPreS exists by fixing
   a ghost name for the liveset. -/
 class allocHistGS (GF : BundledGFunctors) extends allocHistPreS GF where
-  allocmap : AllocMap
   liveset_name  : GName
+  allocmap : AllocMap
+  --TODO: This doesn't actually enforce the validity condition! Needs to be fixed
+  liveset : Std.ExtTreeSet AllocId compare
+  liveset_valid : liveset.inner.keys ⊆ allocmap.keys
 
 -- The heap is a map from addresses to values
 abbrev VIP_HeapF := fun V => Std.ExtTreeMap Addr V compare
@@ -57,8 +59,6 @@ abbrev VIP_HeapF := fun V => Std.ExtTreeMap Addr V compare
 class VIP_HeapGS (GF : BundledGFunctors) where
   provenance : allocHistGS GF
   memory     : genHeapGS Addr Val GF VIP_HeapF
-  -- TODO: enforce validity condition that the liveset is a subset of dom(alloc history)
-  -- valid   : ExtTreeMap.keys provenance.allocmap = []
 
 attribute [reducible, instance] VIP_HeapGS.provenance
 attribute [reducible, instance] VIP_HeapGS.memory
@@ -70,7 +70,7 @@ def AllocHist_elem (l : AllocId) (v : AllocMetaData) : IProp GF := iprop%
   ⌜ (allocHistGS.allocmap GF).get? l = some v ⌝
 
 def Live (l : AllocId) : IProp GF :=
-  iOwn (E := allocHistPreS.liveset) (allocHistGS.liveset_name GF) (◯ (.valid { l }))
+  iOwn (E := allocHistPreS.livesetR) (allocHistGS.liveset_name GF) (◯ (.valid { l }))
 
 syntax "AllocHistory[@" term "]" "=" "(" term ("," term)? ")" : term
 macro_rules
